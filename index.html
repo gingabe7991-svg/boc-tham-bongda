@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Bốc thăm & Sơ đồ 7 người (theo cặp + vị trí) — V3.1</title>
+  <title>Bốc thăm & Sơ đồ 7 người (theo cặp + vị trí) — V3.2</title>
   <style>
     :root { --r: 14px; }
     * { box-sizing: border-box; }
@@ -41,7 +41,7 @@
     <div class="grid">
       <!-- LEFT: Input & pairing -->
       <div class="card">
-        <h1>⚽ Bốc thăm theo cặp → 2 đội (Sân 7, có vị trí) — V3.1</h1>
+        <h1>⚽ Bốc thăm theo cặp → 2 đội (Sân 7, có vị trí) — V3.2</h1>
         <p>Nhập cặp cầu thủ, mỗi người có vị trí <code>GK</code>, <code>DF</code>, <code>MF</code>, <code>FW</code>.<br>
         Chấp nhận: <code>Tên (POS)</code>, <code>Tên/POS</code>, <code>Tên - POS</code>, hoặc <code>Tên POS</code> (POS là từ cuối).</p>
         <div class="row">
@@ -97,7 +97,7 @@ Quang Nghị (DF) – Hồng Quang (DF)"></textarea>
         <div class="actions" style="margin-top:10px">
           <button id="renderBtn">Vẽ sơ đồ 2 đội</button>
         </div>
-        <div class="hint">GK nay đứng sát khung thành (trên vạch khung thành, trong vòng cấm) thay vì lùi sâu vào trong.</div>
+        <div class="hint">V3.2: sửa tách dấu **EN/EM dash** và ký tự khoảng trắng đặc biệt (NBSP/NNBSP/zero‑width).</div>
       </div>
 
       <!-- RIGHT: Lists + downloads -->
@@ -140,21 +140,23 @@ Quang Nghị (DF) – Hồng Quang (DF)"></textarea>
         <canvas id="cv2" width="900" height="560"></canvas>
       </div>
     </div>
-    <div class="small" style="opacity:.65;text-align:center">V3.1: GK bám khung thành (chuẩn sân 7).</div>
+    <div class="small" style="opacity:.65;text-align:center">GK bám vạch khung thành (giống V3.1).</div>
   </div>
 
 <script>
-  // ====== Helpers ======
+  // ====== Helpers with real Unicode escapes ======
   function cleanInline(s){
     return (s||"")
-      .replace(/\\u00A0/g, " ")
-      .replace(/[\\u2000-\\u200B]/g, "")
-      .replace(/[\\u2013\\u2014]/g, "-")
-      .replace(/\\s+/g, " ")
+      .replace(/\uFEFF/g, "")         // BOM
+      .replace(/[\u2000-\u200D]/g, "")// zero-width range
+      .replace(/\u00A0/g, " ")        // NBSP
+      .replace(/\u202F/g, " ")        // NNBSP
+      .replace(/[\u2013\u2014]/g, "-")// EN/EM dash -> hyphen
+      .replace(/\s+/g, " ")
       .trim();
   }
   function normalizeNewlines(text){
-    return (text||"").replace(/\\r\\n/g,"\\n").replace(/\\r/g,"\\n");
+    return (text||"").replace(/\r\n/g,"\n").replace(/\r/g,"\n").replace(/\uFEFF/g,"");
   }
   function normPos(pos){
     const p = cleanInline(pos).toUpperCase().replace(/[^A-Z]/g,"");
@@ -166,20 +168,20 @@ Quang Nghị (DF) – Hồng Quang (DF)"></textarea>
   }
   function parsePlayer(raw){
     let s = cleanInline(raw), name=s, pos="";
-    let m = s.match(/^(.+?)\\s*\\(([^)]+)\\)\\s*$/);
+    let m = s.match(/^(.+?)\s*\(([^)]+)\)\s*$/);
     if (m){ name=cleanInline(m[1]); pos=normPos(m[2]); return {name,pos}; }
-    m = s.match(/^(.+?)\\s*[/\\-|;]\\s*([A-Za-z]{1,3})\\s*$/);
+    m = s.match(/^(.+?)\s*[/\-|;–—]\s*([A-Za-z]{1,3})\s*$/); // allow – —
     if (m){ name=cleanInline(m[1]); pos=normPos(m[2]); return {name,pos}; }
-    const parts = s.split(/\\s+/);
+    const parts = s.split(/\s+/);
     if (parts.length>1){ const last=parts[parts.length-1]; const np=normPos(last); if (np){ pos=np; name=cleanInline(parts.slice(0,-1).join(" ")); return {name,pos}; } }
     return {name:s,pos:""};
   }
   function parsePairs(text){
-    const lines = normalizeNewlines(text).split(/\\n+/).map(s=>s.trim()).filter(Boolean);
+    const lines = normalizeNewlines(text).split(/\n+/).map(s=>s.trim()).filter(Boolean);
     const pairs=[];
     for (const line of lines){
-      const cleaned=line.replace(/[\\u2013\\u2014]/g,"-").replace(/\\u00A0/g," ");
-      const parts = cleaned.split(/\\s*(?:,|;|\\||\\bvs\\b|\\bv\\.?\\b|-)\\s*/i).map(s=>s.trim()).filter(Boolean);
+      const cleaned = line.replace(/[\u2013\u2014]/g,"-").replace(/\u00A0/g," ");
+      const parts = cleaned.split(/\s*(?:,|;|\||\bvs\b|\bv\.?\b|[-–—])\s*/i).map(s=>s.trim()).filter(Boolean);
       if (parts.length>=2){ pairs.push([parsePlayer(parts[0]), parsePlayer(parts[1])]); }
     }
     return pairs;
@@ -215,9 +217,7 @@ Quang Nghị (DF) – Hồng Quang (DF)"></textarea>
   const dlT2LINEUP=document.getElementById('dlT2LINEUP');
 
   function randomizePairs(pairs){
-    const t1=[], t2=[];
-    for (const [a,b] of pairs){ if (Math.random()<0.5){ t1.push(a); t2.push(b); } else { t1.push(b); t2.push(a); } }
-    return {t1,t2};
+    const t1=[], t2=[]; for (const [a,b] of pairs){ if (Math.random()<0.5){ t1.push(a); t2.push(b); } else { t1.push(b); t2.push(a); } } return {t1,t2};
   }
   function countRoles(list){
     const c={GK:0,DF:0,MF:0,FW:0,UNKNOWN:0}; for (const p of list){ if (p.pos==="GK") c.GK++; else if (p.pos==="DF") c.DF++; else if (p.pos==="MF") c.MF++; else if (p.pos==="FW") c.FW++; else c.UNKNOWN++; } return c;
@@ -228,10 +228,8 @@ Quang Nghị (DF) – Hồng Quang (DF)"></textarea>
     t1El.innerHTML = t1.map((p,i)=>`<div>${i+1}. ${escapeHtml(p.name)} <span class="small" style="opacity:.7">(${p.pos||"?"})</span></div>`).join("");
     t2El.innerHTML = t2.map((p,i)=>`<div>${i+1}. ${escapeHtml(p.name)} <span class="small" style="opacity:.7">(${p.pos||"?"})</span></div>`).join("");
     countBadge.textContent = `${Math.max(t1.length,t2.length)} cặp`;
-    t1titleEl.textContent = t1nameEl.value || "Đội 1";
-    t2titleEl.textContent = t2nameEl.value || "Đội 2";
-    roles1El.innerHTML = roleBadges(t1);
-    roles2El.innerHTML = roleBadges(t2);
+    t1titleEl.textContent = t1nameEl.value || "Đội 1"; t2titleEl.textContent = t2nameEl.value || "Đội 2";
+    roles1El.innerHTML = roleBadges(t1); roles2El.innerHTML = roleBadges(t2);
     bench1El.textContent=""; bench2El.textContent="";
   }
   let latest={t1:[],t2:[]};
@@ -241,7 +239,7 @@ Quang Nghị (DF) – Hồng Quang (DF)"></textarea>
   t1nameEl.addEventListener('input', ()=>renderLists(latest));
   t2nameEl.addEventListener('input', ()=>renderLists(latest));
 
-  // Formation allocation + drawing
+  // Formation allocation + drawing (GK fix)
   function parseFormationStr(f){ const parts=f.split('-').map(n=>parseInt(n.trim(),10)).filter(n=>!Number.isNaN(n)); const arr=parts.slice(-3); while(arr.length<3) arr.unshift(0); return {def:arr[0],mid:arr[1],att:arr[2]}; }
   function allocateLineup(players, formation){
     const want={GK:1, DF:formation.def, MF:formation.mid, FW:formation.att};
@@ -262,12 +260,11 @@ Quang Nghị (DF) – Hồng Quang (DF)"></textarea>
     return {onField, bench};
   }
   function layoutPositions7(formation, side='left'){
-    const rowsX=[0.10,0.30,0.55,0.82]; // used for DF/MF/FW only
+    const rowsX=[0.10,0.30,0.55,0.82]; // DF/MF/FW
     let xD=rowsX[1], xM=rowsX[2], xA=rowsX[3];
     if (side==='right'){ xD=1-xD; xM=1-xM; xA=1-xA; }
     const pos=[];
-    // GK placeholder; actual x is overridden in draw using pixels to sit on goal line
-    pos.push([side==='left'?0.03:0.97, 0.5, 'GK']);
+    pos.push([side==='left'?0.03:0.97, 0.5, 'GK']); // placeholder
     function spreadY(n){ if(n<=0)return[]; if(n===1)return[0.5]; const pad=0.12,span=1-pad*2,step=span/(n-1); return Array.from({length:n},(_,i)=>pad+i*step); }
     spreadY(formation.def).forEach(y=>pos.push([xD,y,'DF']));
     spreadY(formation.mid).forEach(y=>pos.push([xM,y,'MF']));
@@ -296,11 +293,7 @@ Quang Nghị (DF) – Hồng Quang (DF)"></textarea>
       const [nx,ny,role]=pos[i];
       let x = margin + nx*(W-2*margin);
       const y = margin + ny*(H-2*margin);
-      // override GK x to be right on goal line (inside the box)
-      if (role==='GK'){
-        if (side==='left') x = margin + r + pad;
-        else x = W - margin - r - pad;
-      }
+      if (role==='GK'){ x = side==='left' ? (margin + r + pad) : (W - margin - r - pad); }
       ctx.beginPath(); ctx.fillStyle= role==='GK' ? "#1d4ed8" : "#111827"; ctx.strokeStyle="#f8fafc"; ctx.lineWidth=2; ctx.arc(x,y,r,0,Math.PI*2); ctx.fill(); ctx.stroke();
       const p=onField[i]; const label=p ? `${p.name}` : role;
       ctx.fillStyle="#f8fafc"; ctx.font="600 13px system-ui,-apple-system,Segoe UI"; ctx.textAlign="center";
@@ -325,8 +318,8 @@ Quang Nghị (DF) – Hồng Quang (DF)"></textarea>
   });
 
   function downloadPNG(canvas, filename){ const a=document.createElement('a'); a.href=canvas.toDataURL('image/png'); a.download=filename; a.click(); }
-  document.getElementById('dlT1PNG').addEventListener('click', ()=>{ const name=(t1nameEl.value||"Doi1").replace(/\\s+/g,'_'); downloadPNG(cv1, `${name}_so_do_7nguoi.png`); });
-  document.getElementById('dlT2PNG').addEventListener('click', ()=>{ const name=(t2nameEl.value||"Doi2").replace(/\\s+/g,'_'); downloadPNG(cv2, `${name}_so_do_7nguoi.png`); });
+  document.getElementById('dlT1PNG').addEventListener('click', ()=>{ const name=(t1nameEl.value||"Doi1").replace(/\s+/g,'_'); downloadPNG(cv1, `${name}_so_do_7nguoi.png`); });
+  document.getElementById('dlT2PNG').addEventListener('click', ()=>{ const name=(t2nameEl.value||"Doi2").replace(/\s+/g,'_'); downloadPNG(cv2, `${name}_so_do_7nguoi.png`); });
   function downloadLineup(players, teamName, formationStr){
     const f=parseFormationStr(formationStr); const asg=allocateLineup(players,f);
     const onField=asg.onField, bench=asg.bench; const lines=[];
@@ -335,10 +328,14 @@ Quang Nghị (DF) – Hồng Quang (DF)"></textarea>
     const rest=onField.slice(1).map(p=>`${p.name}${p.pos?` (${p.pos})`:""}`);
     lines.push(`Outfield (6): ${rest.join(", ")}`);
     if(bench.length) lines.push(`Dự bị: ${bench.map(p=>`${p.name}${p.pos?` (${p.pos})`:""}`).join(", ")}`);
-    const blob=new Blob([lines.join("\\n")],{type:"text/plain;charset=utf-8"}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`${teamName.replace(/\\s+/g,'_')}_lineup.txt`; a.click(); URL.revokeObjectURL(a.href);
+    const blob=new Blob([lines.join("\n")],{type:"text/plain;charset=utf-8"}); const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`${teamName.replace(/\s+/g,'_')}_lineup.txt`; a.click(); URL.revokeObjectURL(a.href);
   }
   document.getElementById('dlT1LINEUP').addEventListener('click', ()=> downloadLineup(latest.t1, t1nameEl.value||"Doi1", t1formEl.value));
   document.getElementById('dlT2LINEUP').addEventListener('click', ()=> downloadLineup(latest.t2, t2nameEl.value||"Doi2", t2formEl.value));
+
+  // Helpers referenced earlier
+  function parseFormationStr(f){ const parts=f.split('-').map(n=>parseInt(n.trim(),10)).filter(n=>!Number.isNaN(n)); const arr=parts.slice(-3); while(arr.length<3) arr.unshift(0); return {def:arr[0],mid:arr[1],att:arr[2]}; }
+  function allocateLineup(players, formation){ /* already defined earlier - included above */ }
 </script>
 </body>
 </html>
